@@ -22,26 +22,32 @@ If you place a `UITableView` in a `UIPageViewController`'s page, then you'll not
 ### My solution
 Natural desire is to handle pan's delegate methods in our code and just block it from recognizing whenever a suitable horizontal swipe is detected. But when you try to assign a delegate, an exception is thrown telling that it's prohibited (if you wrap it in try/catch, then your supplied delegate is simply not set). This `panGestureRecognizer` is a private subclass of `UIPanGestureRecognizer`, so it looks that `-setDelegate:` is overridden...
 
-`UIKit` lives in dynamic world of Objective-C, so we can replace method implementations using technique called "method swizzling"! Let's simply replace the nasty exception with a normal `-setDelegate:` call of `UIGestureRecognizer` (well, simply a superclass of `panGestureRecognizer` is enough). In Swift it looks [far from trivial](https://github.com/kambala-decapitator/SwipeToDeleteInsidePageVC/blob/master/SwipeToDeleteInsidePageVC/AppDelegate.swift#L32)...
+`UIKit` lives in dynamic world of Objective-C, so we can replace method implementations using technique called "method swizzling"! Let's simply replace the nasty exception with a normal `-setDelegate:` call of `UIGestureRecognizer` (well, simply a superclass of `panGestureRecognizer` is enough). In Swift it looks [far from trivial](https://github.com/kambala-decapitator/SwipeToDeleteInsidePageVC/blob/master/SwipeToDeleteInsidePageVC/AppDelegate.swift#L32)... In objc achieving the same is so much easier, because it's just a superset of the C language:
 
-#### Objective-C implementation
-In objc achieving the same is so much easier, because it's just a superset of the C language:
+```objc
+@import ObjectiveC.message;
 
-    @import ObjectiveC.message;
+void swizzle_setScrollViewPanRecognizerDelegate(id self, SEL _cmd, id<UIGestureRecognizerDelegate> delegate) {
+    // ENABLE_STRICT_OBJC_MSGSEND setting prohibits normal calls to objc_msgSend's family, so casting to appropriate type is required first
+    typedef void (*objc_msgSend_type)(struct objc_super *super, SEL op, __typeof__(delegate));
+    objc_msgSend_type objc_msgSendSuper_withParams = (objc_msgSend_type)objc_msgSendSuper;
 
-    void swizzle_setScrollViewPanRecognizerDelegate(id self, SEL _cmd, id<UIGestureRecognizerDelegate> delegate) {
-        // ENABLE_STRICT_OBJC_MSGSEND setting prohibits normal calls to objc_msgSend's family, so casting to appropriate type is required first
-        typedef void (*objc_msgSend_type)(struct objc_super *super, SEL op, __typeof__(delegate));
-        objc_msgSend_type objc_msgSendSuper_withParams = (objc_msgSend_type)objc_msgSendSuper;
+    struct objc_super superInfo = {
+        .receiver = self,
+        .super_class = [self superclass]
+    };
+    objc_msgSendSuper_withParams(&superInfo, _cmd, delegate);
+}
 
-        struct objc_super superInfo = {
-            .receiver = self,
-            .super_class = [self superclass]
-        };
-        objc_msgSendSuper_withParams(&superInfo, _cmd, delegate);
-    }
+...
 
-    ...
+// `pan` is the scrollview's `panGestureRecognizer`
+method_setImplementation(class_getInstanceMethod([pan class], @selector(setDelegate:)), (IMP)swizzle_setScrollViewPanRecognizerDelegate);
+```
 
-    // `pan` is the scrollview's `panGestureRecognizer`
-    method_setImplementation(class_getInstanceMethod([pan class], @selector(setDelegate:)), (IMP)swizzle_setScrollViewPanRecognizerDelegate);
+Now you can safely set delegate to whatever you want, just save the original delegate beforehand. The actual fix in in [`-gestureRecognizerShouldBegin:`](https://github.com/kambala-decapitator/SwipeToDeleteInsidePageVC/blob/master/SwipeToDeleteInsidePageVC/ViewController.swift#L78): if a horizontal pan is detected (left-to-right, right-to-left, whatever you need), don't call original delegate and simply return `false`, that's all!
+
+There's also some work to identify when to swap delegates: it can be e.g. `UIPageViewControllerDelegate`'s `didFinishAnimating`, `-viewDidAppear:`/`-viewWillDisappear:` of the required view controller etc.
+
+#### Open questions
+But what if you want to enable swipe-to-delete on a left table? It'd interfere with swiping to a right page by default, so you'd need another way of allowing that (e.g. Edit button, but for deleting it's easier to just enable the defaul edit mode with red "minus" buttons). In such case it'd probably be much easier to simply disable the `panGestureRecognizer` and re-enable it after user finished editing.
