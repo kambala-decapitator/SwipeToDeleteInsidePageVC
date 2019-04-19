@@ -13,8 +13,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
     let centralVc = UIViewController()
-    let leftTable = ViewController("left")
-    let rightTable = ViewController("right")
+    let  leftTable = ViewController("left",  isRightToLeft: false)
+    let rightTable = ViewController("right", isRightToLeft: true)
     weak var pageVcScrollViewPanRecognizerOriginalDelegate: UIGestureRecognizerDelegate!
 
 
@@ -89,12 +89,6 @@ extension AppDelegate: UIPageViewControllerDelegate {
         guard completed && currentVc != previousViewControllers.first else {
             return
         }
-
-        if currentVc == rightTable {
-            pageVcScrollViewPanRecognizer().delegate = rightTable
-        }
-        else {
-            pageVcScrollViewPanRecognizer().delegate = pageVcScrollViewPanRecognizerOriginalDelegate
-        }
+        pageVcScrollViewPanRecognizer().delegate = currentVc != centralVc ? (currentVc as! UIGestureRecognizerDelegate) : pageVcScrollViewPanRecognizerOriginalDelegate
     }
 }

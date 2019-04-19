@@ -13,10 +13,12 @@ class ViewController: UITableViewController {
     var cellCount = 10
     let cellIdentifier = "cell"
     let cellText: String
+    let isRightToLeftCellSwipeEnabled: Bool // left-to-right otherwise
 
 
-    init(_ text: String) {
+    init(_ text: String, isRightToLeft: Bool) {
         cellText = text
+        isRightToLeftCellSwipeEnabled = isRightToLeft
         super.init(style: .plain)
     }
 
@@ -51,7 +53,17 @@ class ViewController: UITableViewController {
 
     // MARK: - UITableViewDelegate
     override func tableView(_ tableView: UITableView, editingStyleForRowAt indexPath: IndexPath) -> UITableViewCell.EditingStyle {
-        return .delete
+        return isRightToLeftCellSwipeEnabled ? .delete : .none
+    }
+
+    override func tableView(_ tableView: UITableView, leadingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
+        guard !isRightToLeftCellSwipeEnabled else {
+            return nil
+        }
+        return UISwipeActionsConfiguration(actions: [UIContextualAction(style: .normal, title: "action", handler: { (action, sourceView, completion) in
+            print("triggered \(action) in \(sourceView)")
+            completion(true)
+        })])
     }
 }
 
@@ -63,9 +75,10 @@ extension ViewController: UIGestureRecognizerDelegate {
     }
 
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        // right-to-left swipe is for UITableView's swipe-to-delete
+        // right-to-left swipe is for UITableView's swipe-to-delete, left-to-right - for custom cell actions on the left
         let panGestureRecognizer = gestureRecognizer as! UIPanGestureRecognizer
-        guard panGestureRecognizer.velocity(in: panGestureRecognizer.view).x < 0 else {
+        let horizontalVelocity = panGestureRecognizer.velocity(in: panGestureRecognizer.view).x
+        guard (isRightToLeftCellSwipeEnabled && horizontalVelocity < 0) || (!isRightToLeftCellSwipeEnabled && horizontalVelocity > 0) else {
             return originalPanDelegate().gestureRecognizerShouldBegin!(gestureRecognizer)
         }
         return false
