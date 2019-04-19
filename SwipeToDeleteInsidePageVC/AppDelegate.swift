@@ -15,8 +15,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     let centralVc = UIViewController()
     let  leftTable = ViewController("left",  isRightToLeft: false)
     let rightTable = ViewController("right", isRightToLeft: true)
+    weak var gestureRecognizerShouldBeginCustomHandler: ViewController?
     weak var pageVcScrollViewPanRecognizerOriginalDelegate: UIGestureRecognizerDelegate!
 
+    typealias ObjcGestureRecognizerShouldBeginFn = @convention(c) (AnyObject, Selector, UIGestureRecognizer) -> Bool
+    var gestureRecognizerShouldBeginOriginalImp: ObjcGestureRecognizerShouldBeginFn!
+    let gestureRecognizerShouldBeginSelector = #selector(UIGestureRecognizerDelegate.gestureRecognizerShouldBegin(_:))
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         window = UIWindow(frame: UIScreen.main.bounds)
@@ -25,39 +29,33 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             pageVc.dataSource = self
             pageVc.delegate = self
             pageVc.setViewControllers([self.centralVc], direction: .forward, animated: false, completion: nil)
+
+            pageVcScrollViewPanRecognizerOriginalDelegate = (pageVc.view.subviews.first as! UIScrollView).panGestureRecognizer.delegate
             return pageVc
         }()
         window!.makeKeyAndVisible()
 
-        // swizzle -setDelegate: of scrollview's pan to prevent exception
-        let pan = pageVcScrollViewPanRecognizer()
-        pageVcScrollViewPanRecognizerOriginalDelegate = pan.delegate
-        let panClass = type(of: pan)
-        let superSetDelegateBlock: @convention(block) (AnyObject?, UIGestureRecognizerDelegate?) -> Void = { (this: AnyObject?, delegate: UIGestureRecognizerDelegate?) in
-            // call -setDelegate: of pan's superclass
-            // https://stackoverflow.com/a/54006381/1971301
-            let panSuperClass: AnyClass = class_getSuperclass(panClass)!
-            let superSetDelegateSelector = #selector(setter: UIPanGestureRecognizer.delegate)
-            let superSetDelegateImp = class_getMethodImplementation(panSuperClass, superSetDelegateSelector)!
-
-            typealias ObjCSetDelegateFn = @convention(c) (AnyObject, Selector, UIGestureRecognizerDelegate?) -> Void
-            let setDelegateFn = unsafeBitCast(superSetDelegateImp, to: ObjCSetDelegateFn.self)
-            setDelegateFn(pan, superSetDelegateSelector, delegate)
+        // swizzle -gestureRecognizerShouldBegin: of pan's delegate
+        let superSetDelegateBlock: @convention(block) (AnyObject?, UIGestureRecognizer) -> Bool = { (this: AnyObject?, gestureRecognizer: UIGestureRecognizer) in
+            // only perform custom handling if the handler is set and it's pan's delegate that is called
+            guard let handler = self.gestureRecognizerShouldBeginCustomHandler, (this as? UIGestureRecognizerDelegate) === self.pageVcScrollViewPanRecognizerOriginalDelegate else {
+                return self.gestureRecognizerShouldBeginOriginalImp(this!, self.gestureRecognizerShouldBeginSelector, gestureRecognizer)
+            }
+            return !handler.shouldAllowTableSwipeWithRecognizer(gestureRecognizer)
         }
-        method_setImplementation(class_getInstanceMethod(panClass, #selector(setter: panClass.delegate))!,
-                                 imp_implementationWithBlock(unsafeBitCast(superSetDelegateBlock, to: AnyObject.self)))
+        let protocolSelector = protocol_getMethodDescription(UIGestureRecognizerDelegate.self, gestureRecognizerShouldBeginSelector, false, true).name
+        let imp = method_setImplementation(class_getInstanceMethod(type(of: pageVcScrollViewPanRecognizerOriginalDelegate), protocolSelector!)!,
+                                           imp_implementationWithBlock(unsafeBitCast(superSetDelegateBlock, to: AnyObject.self)))
+        gestureRecognizerShouldBeginOriginalImp = unsafeBitCast(imp, to: ObjcGestureRecognizerShouldBeginFn.self)
 
         centralVc.view.backgroundColor = UIColor.lightGray
         return true
-    }
-
-    func pageVcScrollViewPanRecognizer() -> UIPanGestureRecognizer {
-        return (window!.rootViewController!.view.subviews.first as! UIScrollView).panGestureRecognizer
     }
 }
 
 // MARK: - UIPageViewControllerDataSource
 extension AppDelegate: UIPageViewControllerDataSource {
+
     func pageViewController(_ pageViewController: UIPageViewController, viewControllerAfter viewController: UIViewController) -> UIViewController? {
         switch viewController {
         case leftTable:
@@ -85,10 +83,9 @@ extension AppDelegate: UIPageViewControllerDataSource {
 extension AppDelegate: UIPageViewControllerDelegate {
     
     func pageViewController(_ pageViewController: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController], transitionCompleted completed: Bool) {
-        let currentVc = pageViewController.viewControllers?.first
-        guard completed && currentVc != previousViewControllers.first else {
+        guard completed, let currentVc = pageViewController.viewControllers?.first, currentVc != previousViewControllers.first else {
             return
         }
-        pageVcScrollViewPanRecognizer().delegate = currentVc != centralVc ? (currentVc as! UIGestureRecognizerDelegate) : pageVcScrollViewPanRecognizerOriginalDelegate
+        gestureRecognizerShouldBeginCustomHandler = currentVc != centralVc ? (currentVc as! ViewController) : nil
     }
 }

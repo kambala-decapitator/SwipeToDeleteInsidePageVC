@@ -31,8 +31,11 @@ class ViewController: UITableViewController {
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: cellIdentifier)
     }
 
-    func originalPanDelegate() -> UIGestureRecognizerDelegate {
-        return (UIApplication.shared.delegate as! AppDelegate).pageVcScrollViewPanRecognizerOriginalDelegate
+    func shouldAllowTableSwipeWithRecognizer(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        // right-to-left swipe is for UITableView's swipe-to-delete, left-to-right - for custom cell actions on the left
+        let panGestureRecognizer = gestureRecognizer as! UIPanGestureRecognizer
+        let horizontalVelocity = panGestureRecognizer.velocity(in: panGestureRecognizer.view).x
+        return (isRightToLeftCellSwipeEnabled && horizontalVelocity < 0) || (!isRightToLeftCellSwipeEnabled && horizontalVelocity > 0)
     }
 
     // MARK: - UITableViewDataSource
@@ -64,35 +67,5 @@ class ViewController: UITableViewController {
             print("triggered \(action) in \(sourceView)")
             completion(true)
         })])
-    }
-}
-
-// MARK: - UIGestureRecognizerDelegate
-extension ViewController: UIGestureRecognizerDelegate {
-    
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        return originalPanDelegate().gestureRecognizer!(gestureRecognizer, shouldReceive: touch)
-    }
-
-    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        // right-to-left swipe is for UITableView's swipe-to-delete, left-to-right - for custom cell actions on the left
-        let panGestureRecognizer = gestureRecognizer as! UIPanGestureRecognizer
-        let horizontalVelocity = panGestureRecognizer.velocity(in: panGestureRecognizer.view).x
-        guard (isRightToLeftCellSwipeEnabled && horizontalVelocity < 0) || (!isRightToLeftCellSwipeEnabled && horizontalVelocity > 0) else {
-            return originalPanDelegate().gestureRecognizerShouldBegin!(gestureRecognizer)
-        }
-        return false
-    }
-
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        return originalPanDelegate().gestureRecognizer?(gestureRecognizer, shouldRecognizeSimultaneouslyWith: otherGestureRecognizer) ?? false
-    }
-
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        return originalPanDelegate().gestureRecognizer?(gestureRecognizer, shouldRequireFailureOf: otherGestureRecognizer) ?? false
-    }
-
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        return originalPanDelegate().gestureRecognizer?(gestureRecognizer, shouldBeRequiredToFailBy: otherGestureRecognizer) ?? false
     }
 }
