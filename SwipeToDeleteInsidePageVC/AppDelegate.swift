@@ -36,7 +36,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         window!.makeKeyAndVisible()
 
         // swizzle -gestureRecognizerShouldBegin: of pan's delegate
-        let superSetDelegateBlock: @convention(block) (AnyObject?, UIGestureRecognizer) -> Bool = { (this: AnyObject?, gestureRecognizer: UIGestureRecognizer) in
+        let gestureRecognizerShouldBeginBlock: @convention(block) (AnyObject?, UIGestureRecognizer) -> Bool = { (this: AnyObject?, gestureRecognizer: UIGestureRecognizer) in
             // only perform custom handling if the handler is set and it's pan's delegate that is called
             guard let handler = self.gestureRecognizerShouldBeginCustomHandler, (this as? UIGestureRecognizerDelegate) === self.pageVcScrollViewPanRecognizerOriginalDelegate else {
                 return self.gestureRecognizerShouldBeginOriginalImp(this!, self.gestureRecognizerShouldBeginSelector, gestureRecognizer)
@@ -45,7 +45,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         }
         let protocolSelector = protocol_getMethodDescription(UIGestureRecognizerDelegate.self, gestureRecognizerShouldBeginSelector, false, true).name
         let imp = method_setImplementation(class_getInstanceMethod(type(of: pageVcScrollViewPanRecognizerOriginalDelegate), protocolSelector!)!,
-                                           imp_implementationWithBlock(unsafeBitCast(superSetDelegateBlock, to: AnyObject.self)))
+                                           imp_implementationWithBlock(unsafeBitCast(gestureRecognizerShouldBeginBlock, to: AnyObject.self)))
         gestureRecognizerShouldBeginOriginalImp = unsafeBitCast(imp, to: ObjcGestureRecognizerShouldBeginFn.self)
 
         centralVc.view.backgroundColor = UIColor.lightGray
