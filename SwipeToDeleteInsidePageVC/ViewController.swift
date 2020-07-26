@@ -35,7 +35,9 @@ class ViewController: UITableViewController {
         // right-to-left swipe is for UITableView's swipe-to-delete, left-to-right - for custom cell actions on the left
         let panGestureRecognizer = gestureRecognizer as! UIPanGestureRecognizer
         let horizontalVelocity = panGestureRecognizer.velocity(in: panGestureRecognizer.view).x
-        return (isRightToLeftCellSwipeEnabled && horizontalVelocity < 0) || (!isRightToLeftCellSwipeEnabled && horizontalVelocity > 0)
+        guard (isRightToLeftCellSwipeEnabled && horizontalVelocity < 0) || (!isRightToLeftCellSwipeEnabled && horizontalVelocity > 0) else { return false }
+        // handle table swipe only on actual data
+        return tableView.indexPathForRow(at: panGestureRecognizer.location(in: tableView)) != nil
     }
 
     // MARK: - UITableViewDataSource
